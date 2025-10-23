@@ -27,9 +27,8 @@
 % Requires zipped betas in nifti format and co-registered ROIs 
 
 %% Set Analysis Parameters & Paths
-% DEB: Define which conditions to compare for this specific analysis.
-% The names must exactly match the labels in your behavioral files.
-conditions_to_compare = {'cr_new', 'hit_same', 'fa_sim', 'cr_sim'};
+% The conditions to be used in the analysis are now loaded from the
+% params file, e.g. taskInfo.Conditions
 
 % Load all relevent project information
 if exist('commandFlag','var') == 0
@@ -171,12 +170,10 @@ for iteration=1:length(subjects)
         switch classType
             case 'RSA'
                 try
-                    % DEB: Use the user-defined conditions_to_compare to filter the dataset
-
                     % Find all trials that match any of the conditions to compare
                     is_target_condition = false(size(currDataset.sa.labels));
-                    for k = 1:numel(conditions_to_compare)
-                        is_target_condition = is_target_condition | ~cellfun(@isempty, strfind(currDataset.sa.labels, conditions_to_compare{k}));
+                    for k = 1:numel(taskInfo.Conditions)
+                        is_target_condition = is_target_condition | ~cellfun(@isempty, strfind(currDataset.sa.labels, taskInfo.Conditions{k}));
                     end
 
                     % Keep only the samples that match the target conditions
@@ -184,9 +181,9 @@ for iteration=1:length(subjects)
 
                     % Rebuild the CondList and Cond structures based on the filtered dataset
                     CondList = zeros(size(currDataset.samples,1),1);
-                    for ii=1:length(conditions_to_compare)
+                    for ii=1:length(taskInfo.Conditions)
                         Cond(ii).labels = ~cellfun(@isempty, strfind...
-                            (currDataset.sa.labels, conditions_to_compare{ii}));
+                            (currDataset.sa.labels, taskInfo.Conditions{ii}));
                         Cond(ii).idx = find(Cond(ii).labels == 1);
                         CondList(Cond(ii).idx) = ii;
                     end
@@ -249,431 +246,23 @@ for iteration=1:length(subjects)
                             end
                     end
                     
-                    %Compute within-condition correlations the Haxby way
-                    withinAvgCorr = {};
-                    
-                    for t=1:length(taskInfo.Conditions)
-                        currCorrWithin=corrcoef(Conditions(t).samples);
-                        withinAvgCorr{t} = mean(atanh(nonzeros(tril(currCorrWithin,-1))));
-                    end
-                    
-                    averageRSAWithinForROI = mean(cell2mat(withinAvgCorr)),;
-
-
-                %Plot Matrix: Within Correlation matrix -- 
-                    %ADDITION FOR DATA VISUALIZATION PURPOSES
-                        % figure; 
-                        % imagesc(atanh(corrcoef(Conditions(1).samples)));
-                        % colorbar;
-                        % colormap(jet);
-                        % caxis([-1 1]);
-                        % numVars = size(Conditions(1).samples, 2);  
-                        % set(gca, 'XTick', 1:numVars, 'YTick', 1:numVars);
-                        % set(gca, 'XTickLabel', Conditions(1).sa.labels, 'YTickLabel', Conditions(1).sa.labels);
-
-                       
-                      %Save out correlation matrices by subject and ROI in csv:
-                        % Within1 = atanh(corrcoef(Conditions(1).samples));
-                        % csvwrite([analysis filesep subjects{iteration} filesep subjects{iteration} '_' regionName '_WithinCond1Sim.csv'], Within1);
-
-
-                     %ADDITION FOR DATA VISUALIZATION PURPOSES  
-                        % figure;
-                        % imagesc(atanh(corrcoef(Conditions(2).samples))); 
-                        % colorbar; 
-                        % colormap(jet); 
-                        % caxis([-1 1]);
-                        % numVars = size(Conditions(2).samples, 2);  
-                        % set(gca, 'XTick', 1:numVars, 'YTick', 1:numVars);
-                        % set(gca, 'XTickLabel', Conditions(2).sa.labels, 'YTickLabel', Conditions(2).sa.labels);
-                   
-                    %Save out correlation matrices by subject and ROI in csv:
-                        %Within2 = atanh(corrcoef(Conditions(2).samples));
-                        %csvwrite([analysis filesep subjects{iteration} filesep subjects{iteration} '_'regionName '_WithinCond2Sim.csv'], Within2);
-
-
-
-                    %Compute between-condition correlations the Haxby way
-                    betweenAvgCorr = {};
-                    
-                    for j = 1:size(Conditions(1).samples,2)
-                        for c = 1:size(Conditions(2).samples,2)
-                            betweenAvgCorr{c,j} = corr(Conditions(1).samples(:,j),Conditions(2).samples(:,c),'Type','Pearson');
+                    % Compute RDM
+                    rdm = zeros(length(Cond));
+                    for i = 1:length(Cond)
+                        for j = 1:length(Cond)
+                            % Correlate the mean pattern for each condition
+                            pattern_i = mean(Conditions(i).samples, 2);
+                            pattern_j = mean(Conditions(j).samples, 2);
+                            rdm(i,j) = 1 - corr(pattern_i, pattern_j);
                         end
                     end
                     
-                    averageRSABetweenForROI = mean2(atanh(cell2mat(betweenAvgCorr)));
-
-
-                    %Plot Matrix: Between Correlation matrix
-                        % figure; 
-                        % imagesc(atanh(cell2mat(betweenAvgCorr)));
-                        % colorbar; 
-                        % colormap(jet); 
-                        % caxis([-1 1]);
-                        % numVars = size(betweenAvgCorr, 2);  
-                        % set(gca, 'XTick', 1:numVars, 'YTick', 1:numVars);
-                        % set(gca, 'XTickLabel', Conditions(1).sa.labels, 'YTickLabel', Conditions(2).sa.labels);
-
-
-                    %Save out correlation matrices by subject and ROI in csv:
-                        %csvwrite([analysis filesep subjects{iteration} filesep subjects{iteration} '_' regionName '_BetweenCondSim.csv'],
-                        %betweenAvgCorr);
-                    
-
-                    
-                   % Obtain number of combinations with 2
-                    % conditions selected
-                    combinations=factorial(length(Cond))/...
-                        ((factorial(2)*(factorial(length(Cond)-2))));
-                    
-                    
-                    % Compute for each condition separately
-                    iter=1;
-                    for i=1:combinations
-                        if i<length(Cond)
-                            condCount=1;
-                        elseif i<combinations
-                            condCount=2;
-                            if i==length(Cond)
-                                iter=condCount;
-                            end
-                        else
-                            condCount=3;
-                            iter=condCount;
-                        end
-                        
-                        TrialTypeCombo(1,i) = {strcat(taskInfo.Conditions{condCount},'_v_',taskInfo.Conditions{iter+1})};
-                        
-                        iter=iter+1;
-                    end
+                    % Save the RDM
+                    rdm_filename = fullfile(outputPath, sprintf('%s_rdm.csv', regionName));
+                    csvwrite(rdm_filename, rdm);
 
                     clear targetDSM Conditions;
                 end
              
         end
         
-        %% Save text output of SVM Classification
-        if strcmpi(analysisType,'Searchlight')==0
-            % Create a tidyverse formatted table for final statistical analysis
-            
-            switch classType
-                case 'RSA'
-                    
-                    % Create output stats table
-                    %stats_table = table...
-                    %    (subjectid, roiid, TrialTypeCombo, rho(1,2));
-                    
-                    % create subjectid and roiid columns
-                    subjectid   = repmat(subjects(iteration), length(TrialTypeCombo(1)), 1);
-                    roiid       = repmat({regionName}, length(TrialTypeCombo(1)), 1);
-                    
-                    for i=1:combinations
-                        
-                        conditions = repmat({TrialTypeCombo(i)}, length(TrialTypeCombo(1)), 1);
-                        
-                        %Make table for within
-                        if exist('averageRSAWithinForROI','var')
-                            averageRSAWithinForROI = averageRSAWithinForROI;
-                        else
-                            averageRSAWithinForROI = str2double('NaN');
-                        end
-                        corrValWithin = averageRSAWithinForROI;
-                        
-                        if i==1
-                            statsTableWithin = table(subjectid, roiid, conditions, corrValWithin, withinAvgCorr{i}, withinAvgCorr{i+1});
-                            statsTableWithin.Properties.VariableNames{3}=['conditions'];
-                            statsTableWithin.Properties.VariableNames{4}=['corrValWithin'];
-                            statsTableWithin.Properties.VariableNames{5}=['corrValCond1'];
-                            statsTableWithin.Properties.VariableNames{6}=['corrValCond2'];
-
-                        else
-                            tempTable = table(conditions, corrValWithin);
-                            tempTable.Properties.VariableNames{1}=['conditions' num2str(i)];
-                            tempTable.Properties.VariableNames{2}=['corrValWithin' num2str(i)];
-                            statsTableWithin = [statsTableWithin tempTable];
-                        end
-                        
-                        %Make table for between
-                        if exist('averageRSABetweenForROI','var')
-                            averageRSABetweenForROI = averageRSABetweenForROI;
-                        else
-                            averageRSABetweenForROI = str2double('NaN');
-                        end
-                        corrValBetween = averageRSABetweenForROI;
-                        
-                        if i==1
-                            statsTableBetween = table(subjectid, roiid, conditions, corrValBetween);
-                            statsTableBetween.Properties.VariableNames{3}=['conditions'];
-                            statsTableBetween.Properties.VariableNames{4}=['corrValBetween'];
-                        else
-                            tempTable = table(conditions, corrValBetween);
-                            tempTable.Properties.VariableNames{1}=['conditions'];
-                            tempTable.Properties.VariableNames{2}=['corrValBetween'];
-                            statsTableBetween = [statsTableBetween tempTable];
-                        end
-                        
-                        %Make table for distinctiveness
-                        %Compute distinctiveness score
-                            distinctivenessRSAForROI1 = withinAvgCorr{i} - averageRSABetweenForROI;
-                            distinctivenessRSAForROI2 = withinAvgCorr{i+1} - averageRSABetweenForROI;
-                        
-                        if exist('distinctivenessRSAForROI1','var')
-                            distinctivenessRSAForROI1 = distinctivenessRSAForROI1;
-                        else
-                            distinctivenessRSAForROI1 = str2double('NaN');
-                        end
-                        
-                        if exist('distinctivenessRSAForROI2','var')
-                            distinctivenessRSAForROI2 = distinctivenessRSAForROI2;
-                        else
-                           distinctivenessRSAForROI2 = str2double('NaN');
-                        end
-                        
-                        
-                        distinctivenessRSAForROI1 = distinctivenessRSAForROI1;
-                        distinctivenessRSAForROI2 = distinctivenessRSAForROI2;
-                        
-                        
-                        if i==1
-                            statsTableDistinctiveness = table(subjectid, roiid, conditions, distinctivenessRSAForROI1, distinctivenessRSAForROI2);
-                            statsTableDistinctiveness.Properties.VariableNames{3}=['conditions' num2str(i)];
-                            statsTableDistinctiveness.Properties.VariableNames{4}=['distinctivenessScore1' num2str(i)];
-                            statsTableDistinctiveness.Properties.VariableNames{5}=['distinctivenessScore2' num2str(i)];
-
-                            
-                      
-                        else
-                            tempTable = table(conditions, distinctivenessRSAForROI);
-                            tempTable.Properties.VariableNames{1}=['conditions'];
-                            tempTable.Properties.VariableNames{2}=['distinctivenessScore'];
-                            statsTableDistinctiveness = [statsTableDistinctiveness tempTable];
-                        end
-                        
-                    end
-                    
-                    % within stats table
-                    filenameWithin = sprintf('sub-%s_roiid-%s_RSAwithin_statistics-table.csv', subjectid{:}, roiid{:});
-                    writetable(statsTableWithin, fullfile(outputPath, filenameWithin));
-                    
-                    %between stats table
-                    filenameBetween = sprintf('sub-%s_roiid-%s_RSAbetween_statistics-table.csv', subjectid{:}, roiid{:});
-                    writetable(statsTableBetween, fullfile(outputPath, filenameBetween));
-                    
-                    %distinctiveness stats table
-                    filenameDistinctiveness = sprintf('sub-%s_roiid-%s_RSAdistinctiveness_statistics-table.csv', subjectid{:}, roiid{:});
-                    writetable(statsTableDistinctiveness, fullfile(outputPath, filenameDistinctiveness));
-                    
-
-            end
-            
-            %% Create aggregate table for easy viewing
-            % Create headers
-            if iteration==1 && curMask==1
-                
-                switch classType
-                    case 'RSA'
-                        
-                        %within
-                        summaryWithin=cell(length(subjects)+1,length(masks)*2);
-                        summaryWithin{1,1}='subjectid';
-                        summaryWithin{1,2}='Trial Type';
-                        tmpCnt=3;
-                        
-                        for header=1:length(masks)
-                            summaryWithin{1,tmpCnt}=[masks(header).name(1:end-7)...
-                                '_Similarity'];
-                            summaryWithin{1,tmpCnt+1}=[masks(header).name(1:end-7)...
-                                '_Similarity1'];
-                            summaryWithin{1,tmpCnt+2}=[masks(header).name(1:end-7)...
-                                '_Similarity2'];
-                            tmpCnt=tmpCnt+3;
-
-                        end
-                        
-                        %between
-                        summaryBetween=cell(length(subjects)+1,length(masks)*2);
-                        summaryBetween{1,1}='subjectid';
-                        summaryBetween{1,2}='Trial Type';
-                        tmpCnt=3;
-                        
-                        for header=1:length(masks)
-                            summaryBetween{1,tmpCnt}=[masks(header).name(1:end-7)...
-                                '_SimilarityBetween'];
-                            tmpCnt=tmpCnt+3;
-                        end
-                        
-                        %distinctiveness
-                        summaryDistinctiveness=cell(length(subjects)+1,length(masks)*2);
-                        summaryDistinctiveness{1,1}='subjectid';
-                        summaryDistinctiveness{1,2}='Trial Type';
-                        tmpCnt=3;
-                        
-                        for header=1:length(masks)
-                            summaryDistinctiveness{1,tmpCnt}=[masks(header).name(1:end-7)...
-                                '_Distinctiveness1'];
-                            summaryDistinctiveness{1,tmpCnt+1}=[masks(header).name(1:end-7)...
-                                '_Distinctiveness2'];
-                            tmpCnt=tmpCnt+3;
-                        end
-                       
-                end
-                
-                  switch classType
-                      case 'RSA'
-                          
-                          %within
-                          summaryWithin{1,tmpCnt}=['num_' taskInfo.Conditions{1}];
-                          summaryWithin{1,tmpCnt+1}=['num_' taskInfo.Conditions{2}];
-
-                          
-                          %between
-                          summaryBetween{1,tmpCnt}=['num_' taskInfo.Conditions{1}];
-                          summaryBetween{1,tmpCnt+1}=['num_' taskInfo.Conditions{2}];
-
-                          
-                          %distinctiveness
-                          summaryDistinctiveness{1,tmpCnt}=['num_' taskInfo.Conditions{1}];
-                          summaryDistinctiveness{1,tmpCnt+1}=['num_' taskInfo.Conditions{2}];
-
-                          
-                  end
-                  
-                row=2;
-                header=3;
-                clear tmpCnt;
-                
-            end
-            
-            % Counter for resetting to next row. Uses remainder from divison of
-            % region counter over total (e.g. 1/14) to check data should be
-            % read into next subject line/row.
-            iterCheck=mod(curMask,length(masks));
-            
-            % Add subject, trial type, and accuracy to table
-            switch classType
-                case 'RSA'
-                    %within
-                    summaryWithin{row,1}=subjects{iteration};
-                    summaryWithin{row,2}=TrialTypeCombo{1,1};
-              
-                    
-                    %between
-                    summaryBetween{row,1}=subjects{iteration};
-                    summaryBetween{row,2}=TrialTypeCombo{1,1};
-                    
-                    %distinctiveness
-                    summaryDistinctiveness{row,1}=subjects{iteration};
-                    summaryDistinctiveness{row,2}=TrialTypeCombo{1,1};
-  
-            end
-            
-            switch classType
-                case 'RSA'
-                    summaryWithin{row,header}=averageRSAWithinForROI;
-                    summaryWithin{row,header+1}=withinAvgCorr{i};
-                    summaryWithin{row,header+2}=withinAvgCorr{i+1};
-                    
-                    
-                    summaryBetween{row,header}=averageRSABetweenForROI;
-                    
-                    summaryDistinctiveness{row,header}=distinctivenessRSAForROI1;
-                    summaryDistinctiveness{row,header+1}=distinctivenessRSAForROI2;
-
-                    header=header+3;
-
-            end
-
-            % Drops to next row if remainder is 0 (e.g. all regions have been
-            % entered for a given subject)
-            if iterCheck == 0   
-                switch classType
-                    case 'RSA'
-                        %within
-                        summaryWithin{row,header}=num2str(length(Cond(1).idx));
-                        summaryWithin{row,header+1}=num2str(length(Cond(2).idx));
-                        
-                        %between
-                        summaryBetween{row,header}=num2str(length(Cond(1).idx));
-                        summaryBetween{row,header+1}=num2str(length(Cond(2).idx));
-                        
-                        %distinctiveness
-                        summaryDistinctiveness{row,header}=num2str(length(Cond(1).idx));
-                        summaryDistinctiveness{row,header+1}=num2str(length(Cond(2).idx));
-
-                end
-                row=row+1;
-                header=3;
-            end
-            
-        end
-    end
-end
-
-switch classType
-    case 'RSA'
-        save([fileparts(outputPath) filesep 'summaryWithin_' taskInfo.Conditions{1} '_' taskInfo.Conditions{2} '_' taskInfo.Name '.mat'],'summaryWithin');
-        save([fileparts(outputPath) filesep 'summaryBetween_' taskInfo.Conditions{1} '_' taskInfo.Conditions{2} '_' taskInfo.Name '.mat'],'summaryBetween');
-        save([fileparts(outputPath) filesep 'summaryDistinctiveness_' taskInfo.Conditions{1} '_' taskInfo.Conditions{2} '_' taskInfo.Name '.mat'],'summaryDistinctiveness');
-
-end
-%% Save summary files of RSA.
-
-switch classType
-    case 'RSA'
-        
-        if strcmpi(analysisType,'Searchlight')==0
-            
-            % Write output summary file
-            file1 = fopen([fileparts(outputPath) filesep 'allSimilaritiesWithinSummary_' taskInfo.Conditions{1} '_' taskInfo.Conditions{2} '_' taskInfo.Name '.csv'], 'w');
-            
-            for a=1:size(summaryWithin,1)
-                for b=1:size(summaryWithin,2)
-                    var = eval('summaryWithin{a,b}');
-                    try
-                        fprintf(file1, '%s', var);
-                    end
-                    fprintf(file1, ',');
-                end
-                fprintf(file1, '\n');
-            end
-        end
-        
-        fclose(file1);
-        
-        % Write output summary file
-        file2 = fopen([fileparts(outputPath) filesep 'allSimilaritiesBetweenSummary_' taskInfo.Conditions{1} '_' taskInfo.Conditions{2} '_' taskInfo.Name '.csv'], 'w');
-        
-        for a=1:size(summaryBetween,1)
-            for b=1:size(summaryBetween,2)
-                var = eval('summaryBetween{a,b}');
-                try
-                    fprintf(file2, '%s', var);
-                end
-                fprintf(file2, ',');
-            end
-            fprintf(file2, '\n');
-        end
-        
-        fclose(file2);
-        
-         % Write output summary file
-        file3 = fopen([fileparts(outputPath) filesep 'distinctivenessSummary_' taskInfo.Conditions{1} '_' taskInfo.Conditions{2} '_' taskInfo.Name '.csv'], 'w');
-        
-        for a=1:size(summaryDistinctiveness,1)
-            for b=1:size(summaryDistinctiveness,2)
-                var = eval('summaryDistinctiveness{a,b}');
-                try
-                    fprintf(file3, '%s', var);
-                end
-                fprintf(file3, ',');
-            end
-            fprintf(file3, '\n');
-        end
-        
-        fclose(file3);
-        
-        clc;
-        clear;
-        
-end

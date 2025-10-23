@@ -74,13 +74,19 @@ for i = 1:length(subjects)
         %-- Initialize the names, onsets, durations, and pmods structure arrays
 		onsets = num2cell(BehavData.onset)';
 		durations = num2cell(BehavData.duration)';
-		names = BehavData.trial_type';
 
-		% Filter out trials of no interest
-		trialsOfInterest = ~strcmp(names, 'no_interest');
-		onsets = onsets(trialsOfInterest);
-		durations = durations(trialsOfInterest);
-		names = names(trialsOfInterest);
+        %-- Filter out trials of no interest
+        trialsOfInterest = ~strcmp(BehavData.trial_type, 'no_interest');
+        onsets = onsets(trialsOfInterest);
+        durations = durations(trialsOfInterest);
+        lbin = BehavData.LBin(trialsOfInterest);
+
+        %-- Create condition names based on LBin similarity ratings
+        names = cell(length(lbin),1);
+        for j = 1:length(lbin)
+            names{j} = ['Similarity_' num2str(lbin(j))];
+        end
+        names = names';
 
         %-- Save the Multiple Conditions *.mat file
         % Save the names, onsets, and durations variables to .mat file

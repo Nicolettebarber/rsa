@@ -71,7 +71,7 @@ preprocPipeline = 'fmriprep';
 taskInfo.Name = 'retrieval';
 
 % Conditions of Interest
-taskInfo.Conditions = {'cr_new', 'hit_same', 'fa_sim', 'cr_sim'};
+taskInfo.Conditions = {'Similarity_1', 'Similarity_2', 'Similarity_3', 'Similarity_4', 'Similarity_5'};
 
 % Accuracy flag
 taskInfo.accuracyFlag = 'No';

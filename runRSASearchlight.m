@@ -19,9 +19,8 @@
 %path to cosmo-mvpa
 
 %% Set data paths
-% DEB: Define which conditions to compare for this specific analysis.
-% The names must exactly match the labels in your behavioral files.
-conditions_to_compare = {'cr_new', 'hit_same', 'fa_sim', 'cr_sim'};
+% The conditions to be used in the analysis are now loaded from the
+% params file, e.g. taskInfo.Conditions
 
 % The function cosmo_config() returns a struct containing paths to tutorial
 % data. (Alternatively the paths can be set manually without using
@@ -92,10 +91,10 @@ ds=cosmo_fmri_dataset([data_fn ':beta'],'mask',curROI);
 % all other pairs are equally dissimilar (distance=1).
 curROI
 
-% DEB: Use the user-defined conditions_to_compare to filter the dataset
+% Use the taskInfo.Conditions to filter the dataset
 is_target_condition = false(size(ds.sa.labels));
-for k = 1:numel(conditions_to_compare)
-    is_target_condition = is_target_condition | ~cellfun(@isempty, strfind(ds.sa.labels, conditions_to_compare{k}));
+for k = 1:numel(taskInfo.Conditions)
+    is_target_condition = is_target_condition | ~cellfun(@isempty, strfind(ds.sa.labels, taskInfo.Conditions{k}));
 end
 
 % Keep only the samples that match the target conditions
@@ -103,20 +102,18 @@ ds = cosmo_slice(ds, is_target_condition);
 
 % Rebuild the CondList based on the filtered dataset
 CondList = zeros(size(ds.samples,1),1);
-for ii=1:length(conditions_to_compare)
+for ii=1:length(taskInfo.Conditions)
     Condition(ii).labels = ~cellfun(@isempty, strfind...
-        (ds.sa.labels, conditions_to_compare{ii}));
+        (ds.sa.labels, taskInfo.Conditions{ii}));
     Condition(ii).idx = find(Condition(ii).labels == 1);
     CondList(Condition(ii).idx) = ii;
 end
 
 ds.sa.targets = CondList;
-   
-nsamples=size(ds.samples,1);
-target_dsm=zeros(nsamples);
-target_class=ds.sa.targets;
 
-%% Linear RSA Searchlight
+% Create a target DSM based on a linear model of similarity
+target_class=ds.sa.targets;
+target_dsm=abs(bsxfun(@minus,target_class,target_class'));
 
 % simple sanity check to ensure all attributes are set properly
 cosmo_check_dataset(ds);
@@ -166,22 +163,6 @@ nbrhood=cosmo_spherical_neighborhood(ds,searchlightMetric,searchlightSize);
 fprintf('Searchlight neighborhood definition:\n');
 cosmo_disp(nbrhood);
 
-%% For linear RSA Searchlight
-%computes absolute difference between each pair of samples
-%target_dsm=abs(bsxfun(@minus,target_class,target_class'));
-
-%% For binary RSA Searchlight 
-for row=1:nsamples
-    for col=1:nsamples
-        same_target_class=target_class(row)==target_class(col);
-
-      if same_target_class
-            target_dsm(row,col)= 0; %% weighted as dissimilar
-        else
-            target_dsm(row,col)= 1; %% weighted as similar
-        end
-    end
-end
 
 fprintf('Using the following target dsm\n');
 disp(target_dsm);
