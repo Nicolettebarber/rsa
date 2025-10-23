@@ -49,71 +49,50 @@
 %  Set Path Variables
 
 % Parent/Project Path - directory containing project data and analyses
-directory.Project = inputdlg(['Enter path to parent directory: '],...
-    'File Path',[1 35],{pwd});
-directory.Project = directory.Project{:};
+directory.Project = '/home/acclab/Desktop/axc';
 
-% Directories for raw functional data and behavioral data
-rawData.funcDir = inputdlg(['Enter Path to raw functional data starting from: ' directory.Project],...
-    'File Path',[1 35],{'e.g. CPM/subj/func'});
-rawData.funcDir = [directory.Project filesep rawData.funcDir{:}];
+% DEB: Path to preprocessed functional data, as user specified using fmriprep
+rawData.funcDir = [directory.Project filesep 'derivatives' filesep 'fmriprep'];
 
-% Directory of the behavioral data file
-rawData.behavDir = inputdlg(['Enter Path to behavioral file starting from: ' directory.Project],...
-    'File Path',[1 35],{'e.g. CPM/subj/behav'});
-rawData.behavDir = rawData.behavDir{:};
+% Directory of the behavioral data file.
+% DEB: User has behavioral data in each subject's 'beh' folder.
+% This will be handled in specifyModel.m.
+rawData.behavDir = 'beh';
 
 % Extension of the behavioral file to help search
-rawData.behavFile = inputdlg('Enter Trial Tag File Extension:',...
-    'File extension',[1 35],{'e.g. xlsx, csv'});
-rawData.behavFile = rawData.behavFile{:};
+rawData.behavFile = '.tsv';
 
 % Functional Data Preprocessing Program
-preprocPipeline = questdlg('Select Preprocessing Pipeline',...
-    'Confirm Pipeline',...
-    'spm12','fmriprep','Cancel','fmriprep');
+preprocPipeline = 'fmriprep';
 
 %% Task and Data Information
 
-try
-    % Task Name
-    taskInfo.Name = inputdlg('Enter Task Name: [as written in functional filename]',...
-        'Task Name',[1 35],{'e.g. encoding, nback, rest'});
-    taskInfo.Name = taskInfo.Name{:};
-    
-    % Conditions of Interest
-    taskInfo.Conditions = inputdlg('Enter Conditions of Interest: [separated by commas]',...
-        'Conditions',[1 35],{'e.g. face, object, place'});
-    
-    % Conditions of Interest
-    taskInfo.accuracyFlag = questdlg('Is accuracy possible? (i.e. interactive vs. static task)',...
-        'Confirm Accuracy Potential',...
-        'Yes','No','Cancel','No');
-    
-    % Length of task (in volumes)
-    taskInfo.Datapoints = inputdlg('How many volumes [Length of task]?',...
-        'Volume Number',[1 35],{'150'});
-    taskInfo.Datapoints = str2double(taskInfo.Datapoints{:});
-    
-    taskInfo.Runs = inputdlg('How many runs [# of functional runs]?',...
-        'Number of Runs',[1 35],{'1'});
-    taskInfo.Runs = str2double(taskInfo.Runs{:});
-    
-    taskInfo.Trials = inputdlg('How many trials per run [sum trials for all conditions]?',...
-        'Trial Number',[1 35],{'40'});
-    taskInfo.Trials = str2double(taskInfo.Trials{:});
-    
-    
-    %% Set Project Specific Variables
-    
-    % Please specify:
-    % -The units used (i.e., 'scans' or 'secs')
-    % -The TR or repition time
-    Model.units = 'secs';
-    %Model.TR    = 2.5;
-    Model.TR  = inputdlg('Enter TR: [in seconds]',...
-        'Repetition Time',[1 35],{'2'});
-    Model.TR  = str2double(Model.TR{:});
+% Task Name
+taskInfo.Name = 'retrieval';
+
+% Conditions of Interest
+taskInfo.Conditions = {'cr_new', 'hit_same', 'fa_sim', 'cr_sim'};
+
+% Accuracy flag
+taskInfo.accuracyFlag = 'No';
+
+% Length of task (in volumes)
+taskInfo.Datapoints = 460;
+
+% Number of runs
+taskInfo.Runs = 4;
+
+% Number of trials per run
+taskInfo.Trials = 89;
+
+
+%% Set Project Specific Variables
+
+% Please specify:
+% -The units used (i.e., 'scans' or 'secs')
+% -The TR or repition time
+Model.units = 'secs';
+Model.TR    = 0.8;
     
     % Please specify if a mask is used during model estimation
     Mask.on   = 0; %Default - no mask used
@@ -131,130 +110,66 @@ try
         case 'fmriprep'
             Func.dir         = [directory.Project filesep rawData.funcDir];
             Func.wildcard    = ['^*' taskInfo.Name '_run-']; % File
+            Func.prefix      = 'w';
             
     end
     
-catch
-    warning('Unable to set project information!.')
-end
-
 %% Project Paths
 
-try
-    % General path setup
-    directory.Analysis = [directory.Project filesep 'multivariate'];
-    directory.Model = [directory.Analysis filesep 'models' filesep ...
-        'SingleTrialModel' taskInfo.Name];
-    setenv('analysisPath',directory.Model);
-    !mkdir -p $analysisPath
-    
-    analysisList = {'MVPA','RSA','ERS'};
-    
-    [index,tf] = listdlg('PromptString','Select Multivariate Analysis:',...
-        'SelectionMode','Single','ListString',analysisList);
-    
-    classType = analysisList{index};
-    
-    % Select analysis type. No searchlight is default
-    analysisType = questdlg('Select Analysis Level for Multivariate Test:',...
-        'Confirm Searchlight',...
-        'Searchlight','ROI','Cancel','ROI');
+% General path setup
+directory.Analysis = [directory.Project filesep 'multivariate'];
+directory.Model = [directory.Analysis filesep 'models' filesep ...
+    'SingleTrialModel' taskInfo.Name];
+setenv('analysisPath',directory.Model);
+!mkdir -p $analysisPath
 
-    % Account for RT/regress out. No is default
-    regressRT.flag = questdlg('Regress out Reaction Time (RT)?',...
-        'Confirm Regression',...
-        'Yes','No','Cancel','No');
-catch
-    error('Unable to set project path information!');
-end
+analysisList = {'RSA'};
+classType = analysisList{1};
+
+% DEB: Select analysis type. Options: 'ROI' or 'Searchlight'
+analysisType = 'ROI';
+
+% Account for RT/regress out.
+regressRT.flag = 'No';
 
 %% Classification Flags
 
-try
-    % Bootstrapping Setup
+% Bootstrapping Setup
+bootstrap.flag  = 'No';
+if strcmpi(bootstrap.flag,'Yes')==1
+    bootstrap.numRuns     = taskInfo.Runs;
+    bootstrap.numTrials   = taskInfo.Trials;
+    bootstrap.perm        = 1000;
     
-    bootstrap.flag  = questdlg('Perform Bootstrap?',...
-        'Confirm Bootstrap',...
-        'Yes','No','Cancel','No');
+    bootstrap.trialsPerRun = randperm(length...
+        (1:bootstrap.numTrials));
     
-    if strcmpi(bootstrap.flag,'Yes')==1
-        bootstrap.numRuns     = taskInfo.Runs;
-        bootstrap.numTrials   = taskInfo.Trials;
-        bootstrap.perm        = inputdlg('How many permutations?',...
-            'Permutation Number',[1 35],{'1000'});
-        bootstrap.perm = str2double(bootstrap.perm{:});
-        
-        bootstrap.trialsPerRun = randperm(length...
-            (1:bootstrap.numTrials));
-        
-        for i=1:bootstrap.numRuns
-            bootstrap.structNames{i} = ['perm' num2str(i)];
+    for i=1:bootstrap.numRuns
+        bootstrap.structNames{i} = ['perm' num2str(i)];
+    end
+end
+switch classType
+    % MVPA Flags
+    case 'MVPA'
+        % Compute MVPA with entire run to train/test or individual
+        % trials to train/test
+        trialAnalysis = 'Run';
+        leaveRuns = NaN;
+        if strcmpi(analysisType, 'Searchlight')==1
+            searchlight.Metric = 'radius';
+            searchlight.Size = 50;
         end
-    end
-    switch classType
-        % MVPA Flags
-        case 'MVPA'
-            % Compute MVPA with entire run to train/test or individual
-            % trials to train/test
-            try
-                trialAnalysis = 'Run';
-                
-                leaveRuns = NaN;
-                
-                if strcmpi(analysisType, 'Searchlight')==1
-                    searchlight.Metric = questdlg('Searchlight Metric',...
-                        'SearchlightSize','count','radius','Cancel','count');
-                    
-                    searchlight.Size = inputdlg('Size of the searchlight',...
-                        'Searchlight Size',[1 35],{'50'});
-                    searchlight.Size = str2double(searchlight.Size{:});
-                end
-                
-            catch
-                warning(['Error in setting MVPA analysis flags. '...
-                    'Set to debug mode.']);
-            end
-            
-            % RSA Flags
-        case 'RSA'
-            % Compute RSA with mean activation pattern (average all trials)
-            % or individual trial pattern (all trials are separate)
-            try
-                trialAnalysis = 'Individual';
-                
-                leaveRuns = NaN;
-             
-                if strcmpi(analysisType, 'Searchlight')==1
-                    searchlight.Metric = questdlg('Searchlight Metric',...
-                        'SearchlightSize','count','radius','Cancel','count');
-                    
-                    searchlight.Size = inputdlg('Size of the searchlight',...
-                        'Searchlight Size',[1 35],{'50'});
-                    searchlight.Size = str2double(searchlight.Size{:});
-                end
-            
-            catch
-                warning(['Error in setting RSA analysis flags. '...
-                    'Set to debug mode.']);
-            end
-            
-        case 'ERS'
-            try
-                [index,tf] = listdlg('Name','Possible Tasks',...
-                    'PromptString','Ctrl+Click to select conditions:',...
-                    'ListString',tasks,...
-                    'ListSize',[280,300]);
-                tasks=tasks(index);
-                
-                save([Project 'vars/tasks.mat'],'tasks');
-                
-            catch
-                warning(['Error in setting ERS analysis flags. '...
-                    'Set to debug mode.']);
-            end
-    end
-catch
-    warning('Error in setting classification flags. Set to debug mode.');
+        
+    % RSA Flags
+    case 'RSA'
+        % Compute RSA with mean activation pattern (average all trials)
+        % or individual trial pattern (all trials are separate)
+        trialAnalysis = 'Individual';
+        leaveRuns = NaN;
+        if strcmpi(analysisType, 'Searchlight')==1
+            searchlight.Metric = 'radius';
+            searchlight.Size = 50;
+        end
 end
 
 %% Create Subject List
@@ -291,30 +206,8 @@ catch
 end
 
 %% Assign Conditions
-
-try
-    taskInfo.Conditions = strsplit(taskInfo.Conditions{:},',');
-    
-    subconditionFlag = questdlg('Are there subconditions? (If unsure select No)',...
-        'Confirm Subconditions','Yes','No','Cancel','No');
-        
-    switch subconditionFlag
-        case 'Yes'
-            [index,tf] = listdlg('Name','Possible Conditions',...
-                'PromptString','Ctrl+Click to select conditions:',...
-                'ListString',conds,...
-                'ListSize',[280,300]);
-            
-            subconds=subconds(index);
-            subconditionFlag = 'TRUE';
-            
-        case 'No'
-            subconditionFlag = 'FALSE';
-    end
-    
-catch
-    warning('Unable to assign conditions. Set to debug mode.');
-end
+% DEB: Conditions are already set above.
+subconditionFlag = 'FALSE';
 
 %% Set filename for output
 
